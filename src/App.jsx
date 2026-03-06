@@ -80,10 +80,14 @@ async function fetchSessionKeys(year = 2026) {
   const sessions = await fetchJSON(`${API}/sessions?year=${year}&meeting_key=latest`);
   const fp = {};
   for (const s of sessions) {
-    const t = s.session_type || s.session_name || "";
-    if (/practice 1/i.test(t)) fp.fp1 = s.session_key;
-    else if (/practice 2/i.test(t)) fp.fp2 = s.session_key;
-    else if (/practice 3/i.test(t)) fp.fp3 = s.session_key;
+    // session_name has "Practice 1", "Practice 2" etc.
+    // session_type is just "Practice" for all — so check session_name FIRST
+    const name = s.session_name || "";
+    const type = s.session_type || "";
+    const combined = `${name} ${type}`.toLowerCase();
+    if (/practice 1/i.test(name) || (type === "Practice" && name === "Practice 1")) fp.fp1 = s.session_key;
+    else if (/practice 2/i.test(name) || (type === "Practice" && name === "Practice 2")) fp.fp2 = s.session_key;
+    else if (/practice 3/i.test(name) || (type === "Practice" && name === "Practice 3")) fp.fp3 = s.session_key;
   }
   const meetingName = sessions[0]?.country_name || sessions[0]?.location || "Unknown GP";
   return { keys: fp, meetingName, rawSessions: sessions };
@@ -349,7 +353,15 @@ export default function F1FantasyPredictor() {
       addLog("Fetching session keys for latest meeting...");
       const { keys, meetingName, rawSessions } = await fetchSessionKeys(2026);
       addLog(`Found meeting: ${meetingName}`, "success");
-      addLog(`Sessions available: ${Object.keys(keys).join(", ") || "none yet"}`, "info");
+      
+      // Debug: log what sessions the API returned
+      if (rawSessions?.length > 0) {
+        rawSessions.forEach(s => {
+          addLog(`  → session_name: "${s.session_name}", session_type: "${s.session_type}", key: ${s.session_key}`, "info");
+        });
+      }
+      
+      addLog(`Matched FP sessions: ${Object.keys(keys).map(k => k.toUpperCase()).join(", ") || "none"}`, Object.keys(keys).length > 0 ? "success" : "error");
 
       if (Object.keys(keys).length === 0) {
         throw new Error("No practice sessions found for the latest meeting. Sessions may not have started yet.");
