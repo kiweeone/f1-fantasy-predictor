@@ -77,18 +77,48 @@ async function fetchJSON(url) {
 
 // Find session keys for latest meeting's practice sessions
 async function fetchSessionKeys(year = 2026) {
-  const sessions = await fetchJSON(`${API}/sessions?year=${year}&meeting_key=latest`);
-  const fp = {};
-  for (const s of sessions) {
-    // session_name has "Practice 1", "Practice 2" etc.
-    // session_type is just "Practice" for all — so check session_name FIRST
-    const name = s.session_name || "";
-    const type = s.session_type || "";
-    const combined = `${name} ${type}`.toLowerCase();
-    if (/practice 1/i.test(name) || (type === "Practice" && name === "Practice 1")) fp.fp1 = s.session_key;
-    else if (/practice 2/i.test(name) || (type === "Practice" && name === "Practice 2")) fp.fp2 = s.session_key;
-    else if (/practice 3/i.test(name) || (type === "Practice" && name === "Practice 3")) fp.fp3 = s.session_key;
+  let sessions = [];
+
+  // Try meeting_key=latest first
+  try {
+    sessions = await fetchJSON(`${API}/sessions?year=${year}&meeting_key=latest`);
+  } catch (e) {
+    // ignore, try fallback
   }
+
+  // Fallback: get ALL sessions for the year and find the latest meeting
+  if (!sessions || sessions.length === 0) {
+    const all = await fetchJSON(`${API}/sessions?year=${year}`);
+    if (all && all.length > 0) {
+      const latestMeetingKey = all[all.length - 1].meeting_key;
+      sessions = all.filter(s => s.meeting_key === latestMeetingKey);
+    }
+  }
+
+  if (!sessions || sessions.length === 0) {
+    throw new Error(`No sessions found for ${year}. The API may not have data yet.`);
+  }
+
+  const fp = {};
+
+  // Strategy 1: Match by session_name (e.g. "Practice 1", "FP1")
+  for (const s of sessions) {
+    const name = (s.session_name || "").toLowerCase().trim();
+    if (name === "practice 1" || name === "fp1" || name === "free practice 1") fp.fp1 = s.session_key;
+    else if (name === "practice 2" || name === "fp2" || name === "free practice 2") fp.fp2 = s.session_key;
+    else if (name === "practice 3" || name === "fp3" || name === "free practice 3") fp.fp3 = s.session_key;
+  }
+
+  // Strategy 2: If no named matches, find all "Practice" type sessions by order
+  if (Object.keys(fp).length === 0) {
+    const practiceSessions = sessions.filter(s =>
+      (s.session_type || "").toLowerCase() === "practice"
+    );
+    if (practiceSessions.length >= 1) fp.fp1 = practiceSessions[0].session_key;
+    if (practiceSessions.length >= 2) fp.fp2 = practiceSessions[1].session_key;
+    if (practiceSessions.length >= 3) fp.fp3 = practiceSessions[2].session_key;
+  }
+
   const meetingName = sessions[0]?.country_name || sessions[0]?.location || "Unknown GP";
   return { keys: fp, meetingName, rawSessions: sessions };
 }
