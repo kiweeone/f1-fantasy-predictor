@@ -363,6 +363,8 @@ export default function F1FantasyPredictor() {
   const [sessionWeights, setSessionWeights] = useState({ ...DEFAULT_SESSION_WEIGHTS });
   const [chartView, setChartView] = useState("radar"); // radar | bar | scatter
   const [radarDrivers, setRadarDrivers] = useState(["VER", "LEC", "RUS", "NOR", "PIA"]);
+  const [showRaw, setShowRaw] = useState(false); // false = normalized 0-100, true = raw values
+  const [chartSession, setChartSession] = useState("all"); // "all" | "fp1" | "fp2" | "fp3"
 
   const [myDrivers, setMyDrivers] = useState(["VER", "BEA", "GAS", "LIN", "BOT"]);
   const [myConstructors, setMyConstructors] = useState(["ferrari", "racingbulls"]);
@@ -427,18 +429,66 @@ export default function F1FantasyPredictor() {
   })).sort((a, b) => b.coeff - a.coeff), [coefficients, predictions]);
 
   // Chart data
+  // Signal field mapping for raw values
+  const sigField = { pace: "bestLap", consistency: "consistency", longRun: "longRunPace", lapCount: "lapCount", sector1: "sector1", sector2: "sector2", sector3: "sector3", tyre: "tyreScore", fastLap: "fastLap", speedTrap: "speedTrap" };
+  const sigUnit = { pace: "s", consistency: "s", longRun: "s", lapCount: "", sector1: "s", sector2: "s", sector3: "s", tyre: "", fastLap: "", speedTrap: "km/h" };
+
+  // Get raw or normalized value for a driver/signal/session
+  const getSignalValue = useCallback((driverId, sigKey, session, raw) => {
+    if (session === "all") {
+      // Average across sessions
+      const sessions = ["fp1", "fp2", "fp3"];
+      const vals = sessions.map(s => fpData[driverId]?.[s]?.[sigField[sigKey]] || 0).filter(v => v > 0);
+      if (vals.length === 0) return 0;
+      if (raw) return +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(3);
+      return Math.round((coefficients[driverId]?.signals?.[sigKey] || 0) * 100);
+    } else {
+      const rawVal = fpData[driverId]?.[session]?.[sigField[sigKey]] || 0;
+      if (raw) return +rawVal.toFixed(3);
+      // Normalize within session
+      const allVals = DRIVERS.map(d => fpData[d.id]?.[session]?.[sigField[sigKey]] || 0).filter(v => v > 0);
+      if (allVals.length === 0 || rawVal <= 0) return 0;
+      const mn = Math.min(...allVals), mx = Math.max(...allVals);
+      if (mx === mn) return 50;
+      const sig = ALL_SIGNALS.find(s => s.key === sigKey);
+      const n = (rawVal - mn) / (mx - mn);
+      return Math.round((sig?.invert ? n : 1 - n) * 100);
+    }
+  }, [fpData, coefficients]);
+
   const radarData = useMemo(() => {
     const active = enrichedSignals.filter(s => s.on);
     return active.map(sig => {
       const row = { signal: sig.label };
-      radarDrivers.forEach(did => { row[did] = Math.round((coefficients[did]?.signals?.[sig.key] || 0) * 100); });
+      radarDrivers.forEach(did => { row[did] = getSignalValue(did, sig.key, chartSession, showRaw); });
       return row;
     });
-  }, [coefficients, enrichedSignals, radarDrivers]);
+  }, [enrichedSignals, radarDrivers, chartSession, showRaw, getSignalValue]);
 
-  const barData = useMemo(() => rankedDrivers.filter(d => d.coeff > 0).slice(0, 15).map(d => ({
-    name: d.name.split(" ").pop(), coeff: +(d.coeff * 100).toFixed(1), fill: getTC(d.team), price: d.price, pts: d.projPts
-  })), [rankedDrivers]);
+  // Bar data: stacked signals per driver, with FP1/FP2/FP3 side by side when session != "all"
+  const barData = useMemo(() => {
+    const active = enrichedSignals.filter(s => s.on);
+    const drivers = rankedDrivers.filter(d => d.coeff > 0).slice(0, 15);
+
+    if (chartSession === "all") {
+      return drivers.map(d => {
+        const row = { name: d.name.split(" ").pop(), fill: getTC(d.team) };
+        active.forEach(sig => { row[sig.key] = getSignalValue(d.id, sig.key, "all", showRaw); });
+        return row;
+      });
+    } else {
+      // Side by side: one entry per driver with FP1/FP2/FP3 grouped
+      return drivers.map(d => {
+        const row = { name: d.name.split(" ").pop(), fill: getTC(d.team) };
+        ["fp1", "fp2", "fp3"].forEach(ses => {
+          active.forEach(sig => {
+            row[`${ses}_${sig.key}`] = getSignalValue(d.id, sig.key, ses, showRaw);
+          });
+        });
+        return row;
+      });
+    }
+  }, [rankedDrivers, enrichedSignals, chartSession, showRaw, getSignalValue]);
 
   const scatterData = useMemo(() => rankedDrivers.filter(d => d.coeff > 0).map(d => ({
     x: d.price, y: d.projPts, z: d.coeff * 100, name: d.name.split(" ").pop(), fill: getTC(d.team), id: d.id,
@@ -588,56 +638,126 @@ export default function F1FantasyPredictor() {
             {!hasData ? (
               <div style={{ ...S.card, textAlign: "center", padding: 40 }}><div style={{ fontSize: 40, marginBottom: 12 }}>📊</div><div style={{ fontSize: 14, fontWeight: 700, color: "#8a8f98" }}>Fetch FP data first</div></div>
             ) : (<>
-              <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-                {[["radar", "Radar"], ["bar", "Bar Chart"], ["scatter", "Value Map"]].map(([k, l]) => (
+              {/* Chart type selector */}
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                {[["radar", "Radar"], ["bar", "Signals"], ["scatter", "Value Map"]].map(([k, l]) => (
                   <button key={k} onClick={() => setChartView(k)} style={{ padding: "8px 16px", background: chartView === k ? "#a855f7" : "#1a1d24", border: `1px solid ${chartView === k ? "#a855f7" : "#2d3139"}`, borderRadius: 6, color: chartView === k ? "#fff" : "#8a8f98", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "'Titillium Web', sans-serif", textTransform: "uppercase", letterSpacing: 0.5 }}>{l}</button>
                 ))}
               </div>
 
+              {/* Controls row: session picker + raw/norm toggle (for radar and bar) */}
+              {(chartView === "radar" || chartView === "bar") && (
+                <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[["all", "All FP"], ["fp1", "FP1"], ["fp2", "FP2"], ["fp3", "FP3"]].map(([k, l]) => (
+                      <button key={k} onClick={() => setChartSession(k)} style={{ padding: "6px 12px", background: chartSession === k ? "#FF8000" : "#1a1d24", border: `1px solid ${chartSession === k ? "#FF8000" : "#2d3139"}`, borderRadius: 5, color: chartSession === k ? "#fff" : "#8a8f98", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Titillium Web', sans-serif" }}>{l}</button>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+                    <span style={{ fontSize: 10, color: !showRaw ? "#00d26a" : "#555", fontWeight: 700 }}>Norm</span>
+                    <div onClick={() => setShowRaw(!showRaw)} style={{ width: 40, height: 20, borderRadius: 10, background: showRaw ? "#e10600" : "#00d26a", position: "relative", cursor: "pointer" }}>
+                      <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: showRaw ? 22 : 2, transition: "all 0.2s" }} />
+                    </div>
+                    <span style={{ fontSize: 10, color: showRaw ? "#e10600" : "#555", fontWeight: 700 }}>Raw</span>
+                  </div>
+                </div>
+              )}
+
+              {/* ─── RADAR ─── */}
               {chartView === "radar" && (
                 <div style={S.card}>
-                  <div style={S.lbl("#a855f7")}>Driver Signal Comparison</div>
+                  <div style={S.lbl("#a855f7")}>Driver Signal Comparison {chartSession !== "all" ? `(${chartSession.toUpperCase()})` : ""} {showRaw ? "(Raw)" : "(Normalized)"}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 12 }}>
-                    {rankedDrivers.filter(d => d.coeff > 0).slice(0, 12).map(d => (
+                    {rankedDrivers.filter(d => d.coeff > 0).slice(0, 14).map(d => (
                       <button key={d.id} onClick={() => toggleRadarDriver(d.id)} style={{ padding: "3px 8px", background: radarDrivers.includes(d.id) ? `${getTC(d.team)}33` : "#0d0f13", border: `1px solid ${radarDrivers.includes(d.id) ? getTC(d.team) : "#2d3139"}`, borderRadius: 4, color: radarDrivers.includes(d.id) ? "#fff" : "#555", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Titillium Web', sans-serif" }}>{d.name.split(" ").pop()}</button>
                     ))}
                   </div>
-                  <ResponsiveContainer width="100%" height={350}>
+                  <ResponsiveContainer width="100%" height={380}>
                     <RadarChart data={radarData}>
                       <PolarGrid stroke="#2d3139" />
                       <PolarAngleAxis dataKey="signal" tick={{ fill: "#8a8f98", fontSize: 10 }} />
-                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: "#555", fontSize: 9 }} />
+                      <PolarRadiusAxis angle={30} domain={showRaw ? ["auto", "auto"] : [0, 100]} tick={{ fill: "#555", fontSize: 9 }} />
                       {radarDrivers.map(did => {
                         const d = DRIVERS.find(x => x.id === did);
-                        return d ? <Radar key={did} name={d.name.split(" ").pop()} dataKey={did} stroke={getTC(d.team)} fill={getTC(d.team)} fillOpacity={0.15} strokeWidth={2} /> : null;
+                        return d ? <Radar key={did} name={d.name.split(" ").pop()} dataKey={did} stroke={getTC(d.team)} fill={getTC(d.team)} fillOpacity={0.12} strokeWidth={2} /> : null;
                       })}
+                      <Tooltip contentStyle={{ background: "#1a1d24", border: "1px solid #2d3139", borderRadius: 8, fontSize: 11 }} />
                       <RLegend wrapperStyle={{ fontSize: 10, color: "#8a8f98" }} />
                     </RadarChart>
                   </ResponsiveContainer>
                 </div>
               )}
 
+              {/* ─── BAR: STACKED SIGNALS ─── */}
               {chartView === "bar" && (
                 <div style={S.card}>
-                  <div style={S.lbl("#00d26a")}>Driver Coefficients (Top 15)</div>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={barData} layout="vertical" margin={{ left: 60, right: 20 }}>
+                  <div style={S.lbl("#00d26a")}>
+                    {chartSession === "all" ? "Stacked Signals (All FP)" : `FP1 vs FP2 vs FP3 Comparison`}
+                    {showRaw ? " (Raw)" : " (Normalized 0-100)"}
+                  </div>
+                  <div style={{ ...S.sub, marginBottom: 10 }}>
+                    {chartSession === "all"
+                      ? "Each bar segment = one active signal's contribution. Longer total = stronger overall."
+                      : "Side-by-side bars for each practice session. Compare how drivers evolved across FP1 → FP2 → FP3."
+                    }
+                  </div>
+                  <ResponsiveContainer width="100%" height={Math.max(400, barData.length * 32)}>
+                    <BarChart data={barData} layout="vertical" margin={{ left: 60, right: 20, top: 5, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#2d3139" />
                       <XAxis type="number" tick={{ fill: "#8a8f98", fontSize: 10 }} />
                       <YAxis dataKey="name" type="category" tick={{ fill: "#c8ccd3", fontSize: 11, fontWeight: 700 }} width={55} />
-                      <Tooltip contentStyle={{ background: "#1a1d24", border: "1px solid #2d3139", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "#fff", fontWeight: 700 }} />
-                      <Bar dataKey="coeff" name="Coefficient" radius={[0, 4, 4, 0]}>
-                        {barData.map((d, i) => <Cell key={i} fill={d.fill} />)}
-                      </Bar>
+                      <Tooltip contentStyle={{ background: "#1a1d24", border: "1px solid #2d3139", borderRadius: 8, fontSize: 11 }} labelStyle={{ color: "#fff", fontWeight: 700 }} />
+                      {chartSession === "all" ? (
+                        // Stacked: one bar segment per active signal
+                        enrichedSignals.filter(s => s.on).map(sig => (
+                          <Bar key={sig.key} dataKey={sig.key} name={sig.label} stackId="a" fill={sig.color} />
+                        ))
+                      ) : (
+                        // Side by side: grouped bars for FP1/FP2/FP3 for each active signal
+                        // Show the first active signal across all 3 sessions as grouped bars
+                        (() => {
+                          const active = enrichedSignals.filter(s => s.on);
+                          if (active.length === 1) {
+                            // Single signal: show FP1/FP2/FP3 side by side
+                            return ["fp1", "fp2", "fp3"].map((ses, i) => (
+                              <Bar key={ses} dataKey={`${ses}_${active[0].key}`} name={`${ses.toUpperCase()} ${active[0].label}`} fill={["#8a8f98", "#FF8000", "#e10600"][i]} />
+                            ));
+                          }
+                          // Multiple signals: stack within each session group
+                          return ["fp1", "fp2", "fp3"].map((ses, si) => (
+                            active.map(sig => (
+                              <Bar key={`${ses}_${sig.key}`} dataKey={`${ses}_${sig.key}`} name={`${ses.toUpperCase()} ${sig.label}`} stackId={ses} fill={sig.color} fillOpacity={[0.4, 0.7, 1.0][si]} />
+                            ))
+                          )).flat();
+                        })()
+                      )}
                     </BarChart>
                   </ResponsiveContainer>
+                  {/* Signal legend */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, justifyContent: "center" }}>
+                    {enrichedSignals.filter(s => s.on).map(sig => (
+                      <div key={sig.key} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "#8a8f98" }}>
+                        <div style={{ width: 8, height: 8, borderRadius: 2, background: sig.color }} />{sig.label}
+                      </div>
+                    ))}
+                    {chartSession !== "all" && (
+                      <div style={{ display: "flex", gap: 8, marginLeft: 12, paddingLeft: 12, borderLeft: "1px solid #2d3139" }}>
+                        {[["FP1", 0.4], ["FP2", 0.7], ["FP3", 1.0]].map(([l, op]) => (
+                          <div key={l} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "#8a8f98" }}>
+                            <div style={{ width: 8, height: 8, borderRadius: 2, background: `rgba(255,128,0,${op})` }} />{l}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
+              {/* ─── SCATTER: VALUE MAP ─── */}
               {chartView === "scatter" && (
                 <div style={S.card}>
                   <div style={S.lbl("#27F4D2")}>Value Map: Price vs Projected Points</div>
-                  <div style={{ ...S.sub, marginBottom: 10 }}>Top-right = high points, high cost. Bottom-left = budget picks. Best value = high Y, low X.</div>
+                  <div style={{ ...S.sub, marginBottom: 10 }}>Best value = high projected points (Y), low price (X). Bubble size = coefficient strength.</div>
                   <ResponsiveContainer width="100%" height={400}>
                     <ScatterChart margin={{ bottom: 20, left: 10, right: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#2d3139" />
