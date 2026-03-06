@@ -9,7 +9,7 @@ const PIT_POINTS = [
   { label: "2.2–2.49s", min: 2.2, max: 2.49, pts: 5 }, { label: "2.5–2.99s", min: 2.5, max: 2.99, pts: 2 },
   { label: "3.0s+", min: 3.0, max: 99, pts: 0 },
 ];
-const SESSION_WEIGHTS = { fp1: 0.15, fp2: 0.35, fp3: 0.50 };
+const DEFAULT_SESSION_WEIGHTS = { fp1: 33, fp2: 33, fp3: 34 }; // percentages, will be normalized
 const SIGNAL_WEIGHTS = { paceDelta: 0.40, consistency: 0.25, longRunPace: 0.25, lapCount: 0.10 };
 
 // ─── 2026 GRID ───
@@ -172,21 +172,29 @@ function processLaps(laps) {
 }
 
 // ─── PREDICTION ENGINE ───
-function computeCoefficients(fpData) {
+function computeCoefficients(fpData, sessionWeights) {
   const sessions = ["fp1", "fp2", "fp3"];
-  const sessionW = [SESSION_WEIGHTS.fp1, SESSION_WEIGHTS.fp2, SESSION_WEIGHTS.fp3];
+  const rawW = [sessionWeights.fp1, sessionWeights.fp2, sessionWeights.fp3];
   const driverIds = Object.keys(fpData);
 
-  // Only include sessions that have data
+  // Only include sessions that have grid-level data
   const activeSessions = sessions.filter(s => 
     driverIds.some(id => fpData[id]?.[s]?.bestLap > 0)
   );
 
   if (activeSessions.length === 0) return {};
 
-  // Redistribute weights across available sessions
-  const totalW = activeSessions.reduce((s, ses) => s + sessionW[sessions.indexOf(ses)], 0);
-  const adjW = activeSessions.map(ses => sessionW[sessions.indexOf(ses)] / totalW);
+  // Normalize user weights across active sessions only
+  const activeRawW = activeSessions.map(ses => rawW[sessions.indexOf(ses)]);
+  const totalRawW = activeRawW.reduce((a, b) => a + b, 0);
+  const baseW = activeRawW.map(w => totalRawW > 0 ? w / totalRawW : 1 / activeSessions.length);
+
+  // Find max lap count per session (for per-driver lap confidence scaling)
+  const maxLapsPerSession = {};
+  activeSessions.forEach(s => {
+    const counts = driverIds.map(id => fpData[id]?.[s]?.lapCount || 0);
+    maxLapsPerSession[s] = Math.max(...counts, 1);
+  });
 
   const norms = activeSessions.map((s) => {
     const active = driverIds.filter(id => fpData[id]?.[s]?.bestLap > 0);
@@ -211,11 +219,13 @@ function computeCoefficients(fpData) {
   const coefficients = {};
   driverIds.forEach((id) => {
     let composite = 0;
+    let totalEffectiveWeight = 0;
     const sessionScores = [];
+
     activeSessions.forEach((s, si) => {
       const d = fpData[id]?.[s];
       if (!d || d.bestLap <= 0) {
-        sessionScores.push({ session: s, pace: 0, cons: 0, longRun: 0, lapC: 0, score: 0 });
+        sessionScores.push({ session: s, pace: 0, cons: 0, longRun: 0, lapC: 0, score: 0, weight: 0, confidence: 0 });
         return;
       }
       const n = norms[si];
@@ -224,9 +234,21 @@ function computeCoefficients(fpData) {
       const longRun = norm(d.longRunPace, n.longMin, n.longMax);
       const lapC = norm(d.lapCount, n.lapMin, n.lapMax, true);
       const score = pace * SIGNAL_WEIGHTS.paceDelta + cons * SIGNAL_WEIGHTS.consistency + longRun * SIGNAL_WEIGHTS.longRunPace + lapC * SIGNAL_WEIGHTS.lapCount;
-      sessionScores.push({ session: s, pace, cons, longRun, lapC, score });
-      composite += score * adjW[si];
+
+      // Per-driver confidence: scale session weight by how many laps they did vs max
+      // A driver with 3 laps in a session where others did 30 gets reduced influence
+      const confidence = Math.min(1, (d.lapCount / maxLapsPerSession[s]) * 1.5);
+      // Blend: 70% user-set weight + 30% lap-confidence adjustment
+      const effectiveWeight = baseW[si] * (0.7 + 0.3 * confidence);
+
+      sessionScores.push({ session: s, pace, cons, longRun, lapC, score, weight: effectiveWeight, confidence: +confidence.toFixed(2) });
+      composite += score * effectiveWeight;
+      totalEffectiveWeight += effectiveWeight;
     });
+
+    // Normalize composite by total effective weight (so drivers with missing sessions are comparable)
+    if (totalEffectiveWeight > 0) composite /= totalEffectiveWeight;
+
     coefficients[id] = { composite: +composite.toFixed(4), sessions: sessionScores };
   });
   return coefficients;
@@ -362,6 +384,9 @@ export default function F1FantasyPredictor() {
   const [boost, setBoost] = useState(false);
   const [activeChip, setActiveChip] = useState(null);
 
+  // Session weight controls (user-adjustable, percentages)
+  const [sessionWeights, setSessionWeights] = useState({ ...DEFAULT_SESSION_WEIGHTS });
+
   // Team Builder state
   const [myDrivers, setMyDrivers] = useState(["VER", "BEA", "GAS", "LIN", "BOT"]);
   const [myConstructors, setMyConstructors] = useState(["ferrari", "racingbulls"]);
@@ -436,7 +461,7 @@ export default function F1FantasyPredictor() {
   }, []);
 
   // Computed predictions
-  const coefficients = useMemo(() => computeCoefficients(fpData), [fpData]);
+  const coefficients = useMemo(() => computeCoefficients(fpData, sessionWeights), [fpData, sessionWeights]);
   const predictions = useMemo(() => predictPositions(coefficients), [coefficients]);
   const topLineups = useMemo(() => optimizeLineups(predictions, coefficients, 5), [predictions, coefficients]);
   const maxCoeff = useMemo(() => { const vals = Object.values(coefficients).map((c) => c.composite); return vals.length ? Math.max(...vals) : 1; }, [coefficients]);
@@ -537,8 +562,44 @@ export default function F1FantasyPredictor() {
             ) : (
               <>
                 <div style={{ ...S.sub, marginBottom: 14 }}>
-                  Coefficients from {Object.keys(apiStatus.fetched).map(s => s.toUpperCase()).join(" + ") || "manual data"} (weighted 15/35/50). Signals: pace delta 40%, consistency 25%, long run pace 25%, lap count 10%. Tap a driver to edit their FP data.
+                  Coefficients from {Object.keys(apiStatus.fetched).map(s => s.toUpperCase()).join(" + ") || "manual data"}. Adjust session weights below. Per-driver confidence scales automatically by lap count — low-lap sessions carry less influence.
                 </div>
+
+                {/* SESSION WEIGHT SLIDERS */}
+                <div style={{ ...S.card, border: "1px solid #FF8000", background: "#FF800008" }}>
+                  <div style={S.lbl("#FF8000")}>Session Weights</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+                    {[
+                      { key: "fp1", label: "FP1", color: "#8a8f98" },
+                      { key: "fp2", label: "FP2", color: "#FF8000" },
+                      { key: "fp3", label: "FP3", color: "#e10600" },
+                    ].map(({ key, label, color }) => (
+                      <div key={key} style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color, marginBottom: 6 }}>{label}</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: "#fff", marginBottom: 6 }}>{sessionWeights[key]}%</div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={sessionWeights[key]}
+                          onChange={(e) => setSessionWeights(prev => ({ ...prev, [key]: parseInt(e.target.value) }))}
+                          style={{ width: "100%", accentColor: color, cursor: "pointer" }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                    <div style={{ fontSize: 10, color: "#555" }}>
+                      Total: {sessionWeights.fp1 + sessionWeights.fp2 + sessionWeights.fp3}% (auto-normalized)
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => setSessionWeights({ fp1: 33, fp2: 33, fp3: 34 })} style={{ padding: "4px 10px", background: "#1a1d24", border: "1px solid #2d3139", borderRadius: 4, color: "#8a8f98", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Titillium Web', sans-serif" }}>Equal</button>
+                      <button onClick={() => setSessionWeights({ fp1: 15, fp2: 35, fp3: 50 })} style={{ padding: "4px 10px", background: "#1a1d24", border: "1px solid #2d3139", borderRadius: 4, color: "#8a8f98", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Titillium Web', sans-serif" }}>Recency</button>
+                      <button onClick={() => setSessionWeights({ fp1: 50, fp2: 35, fp3: 15 })} style={{ padding: "4px 10px", background: "#1a1d24", border: "1px solid #2d3139", borderRadius: 4, color: "#8a8f98", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Titillium Web', sans-serif" }}>Early</button>
+                    </div>
+                  </div>
+                </div>
+
                 <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
                   {[{ l: "Pace 40%", c: "#e10600" }, { l: "Consistency 25%", c: "#FF8000" }, { l: "Long Run 25%", c: "#a855f7" }, { l: "Laps 10%", c: "#6692FF" }].map(s => <div key={s.l} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#8a8f98" }}><div style={{ width: 8, height: 8, borderRadius: 2, background: s.c }} />{s.l}</div>)}
                 </div>
@@ -572,8 +633,14 @@ export default function F1FantasyPredictor() {
                   </div>
                   {coefficients[editingDriver]?.sessions?.map((s, i) => (
                     <div key={s.session} style={{ marginBottom: i < (coefficients[editingDriver].sessions.length - 1) ? 10 : 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: "#c8ccd3", textTransform: "uppercase" }}>{s.session.toUpperCase()} <span style={{ color: "#555", fontWeight: 400 }}>({s.score > 0 ? "active" : "no data"})</span></span>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#c8ccd3", textTransform: "uppercase" }}>
+                          {s.session.toUpperCase()}
+                          {s.score > 0 && s.confidence != null && <span style={{ color: s.confidence >= 0.8 ? "#00d26a" : s.confidence >= 0.4 ? "#FF8000" : "#e10600", fontWeight: 400, marginLeft: 6 }}>
+                            conf: {Math.round(s.confidence * 100)}%
+                          </span>}
+                          {s.score <= 0 && <span style={{ color: "#555", fontWeight: 400 }}> (no data)</span>}
+                        </span>
                         <span style={{ fontSize: 11, fontWeight: 900, color: "#FF8000" }}>{s.score.toFixed(3)}</span>
                       </div>
                       {s.score > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 3 }}>
