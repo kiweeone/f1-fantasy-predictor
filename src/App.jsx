@@ -90,8 +90,23 @@ const TC = (id) => T(id)?.color || "#888";
 const DbyN = (n) => DRIVERS.find(d => d.num === n);
 
 // ─── OPENF1 API ───
+// Use authenticated proxy when available (Vercel serverless function)
+// Falls back to direct API for development / non-authenticated access
+const useProxy = typeof window !== "undefined" && window.location.hostname !== "localhost";
+const apiCall = async (path) => {
+  const url = useProxy
+    ? `/api/openf1?path=${encodeURIComponent(path)}`
+    : `https://api.openf1.org${path}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`API ${r.status}`);
+  return r.json();
+};
+const fj = async (fullUrl) => {
+  // Extract path from full URL for proxy routing
+  const path = fullUrl.replace("https://api.openf1.org", "");
+  return apiCall(path);
+};
 const API = "https://api.openf1.org/v1";
-const fj = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error(`API ${r.status}`); return r.json(); };
 
 async function fetchSessions(year = 2026) {
   let ss = [];
