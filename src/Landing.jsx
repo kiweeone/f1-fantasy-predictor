@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 
 const bands = [
@@ -28,22 +28,32 @@ export default function Landing() {
         a{text-decoration:none;color:inherit}
         @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
         .fu{animation:fadeUp .6s ease-out both}
+
+        /* ─── RESPONSIVE VARS ─── */
+        :root { --pad: 48px; --band-dir: row; --hero-dir: row; --hero-align: flex-end; --role-mt: 0; --title-size: clamp(64px, 10vw, 130px); --band-size: clamp(48px, 7vw, 100px); }
+
+        @media (max-width: 768px) {
+          :root { --pad: 20px; --band-dir: column; --hero-dir: column; --hero-align: flex-start; --role-mt: 8px; --title-size: clamp(48px, 14vw, 80px); --band-size: clamp(36px, 10vw, 64px); }
+        }
+
         .band{transition:all .35s cubic-bezier(.16,1,.3,1)}
-        .band:hover{padding-top:56px;padding-bottom:56px}
+        @media (min-width: 769px) {
+          .band:hover{padding-top:56px;padding-bottom:56px}
+        }
         .band-arrow{transition:transform .3s ease,opacity .3s ease;opacity:0;transform:translateX(-10px)}
         .band:hover .band-arrow{opacity:1;transform:translateX(0)}
       `}</style>
 
-      {/* ─── HERO — tight, left-aligned like the bands ─── */}
-      <section className="fu" style={{ padding: "48px 48px 0" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 0 }}>
+      {/* ─── HERO ─── */}
+      <section className="fu" style={{ padding: "var(--pad)", paddingTop: "calc(var(--pad) + 8px)", paddingBottom: 0 }}>
+        <div style={{ display: "flex", flexDirection: "var(--hero-dir)", justifyContent: "space-between", alignItems: "var(--hero-align)", gap: 8 }}>
           <h1 style={{
-            fontSize: "clamp(64px, 10vw, 130px)", fontWeight: 900, letterSpacing: "-0.04em",
+            fontSize: "var(--title-size)", fontWeight: 900, letterSpacing: "-0.04em",
             lineHeight: 0.95, color: "#1a1a1a",
           }}>
             Zhelyo Ivanov
           </h1>
-          <div style={{ textAlign: "right", paddingBottom: 12 }}>
+          <div style={{ textAlign: "right", paddingBottom: 8, marginTop: "var(--role-mt)" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#999", letterSpacing: 1, textTransform: "uppercase" }}>
               Chief Product Officer
             </div>
@@ -55,12 +65,11 @@ export default function Landing() {
       </section>
 
       {/* ─── BANDS ─── */}
-      <section className="fu" style={{ marginTop: 0 }}>
+      <section className="fu">
         {bands.map((p, i) => {
           const isLink = !!p.link;
           const Wrapper = isLink ? Link : "div";
           const wrapperProps = isLink ? { to: p.link } : {};
-          const isAbout = p.title === "About";
 
           return (
             <Wrapper
@@ -70,15 +79,16 @@ export default function Landing() {
               onMouseEnter={() => setHov(i)}
               onMouseLeave={() => setHov(null)}
               style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                padding: "40px 48px", background: p.bg, color: p.color,
-                cursor: isLink ? "pointer" : "default",
+                display: "flex", flexDirection: "var(--band-dir)", justifyContent: "space-between",
+                alignItems: "var(--band-dir)" === "column" ? "flex-start" : "center",
+                padding: "36px var(--pad)", background: p.bg, color: p.color,
+                cursor: isLink ? "pointer" : "default", gap: 8,
               }}
             >
-              <div style={{ display: "flex", alignItems: "baseline", gap: 16, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
                 <span style={{
-                  fontSize: "clamp(48px, 7vw, 100px)", fontWeight: 900,
-                  letterSpacing: "-0.03em", lineHeight: 1,
+                  fontSize: "var(--band-size)", fontWeight: 900,
+                  letterSpacing: "-0.03em", lineHeight: 1.05,
                 }}>
                   {p.title}
                 </span>
@@ -91,9 +101,9 @@ export default function Landing() {
                   </span>
                 )}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
-                <span style={{ fontSize: 14, fontWeight: 500, opacity: 0.7 }}>{p.role}</span>
-                {isLink && <span className="band-arrow" style={{ fontSize: 28, fontWeight: 300 }}>→</span>}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, opacity: 0.7 }}>{p.role}</span>
+                {isLink && <span className="band-arrow" style={{ fontSize: 24, fontWeight: 300 }}>→</span>}
               </div>
             </Wrapper>
           );
@@ -101,15 +111,15 @@ export default function Landing() {
       </section>
 
       {/* ─── SKILLS ─── */}
-      <section style={{ background: "#f0f0f0", padding: "80px 48px" }}>
+      <section style={{ background: "#f0f0f0", padding: "60px var(--pad)" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#bbb", textTransform: "uppercase", letterSpacing: 3, marginBottom: 28 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#bbb", textTransform: "uppercase", letterSpacing: 3, marginBottom: 24 }}>
             Core Competencies
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
             {skills.map(s => (
               <span key={s} style={{
-                fontSize: 15, fontWeight: 600, padding: "10px 22px",
+                fontSize: 14, fontWeight: 600, padding: "8px 18px",
                 background: "#fff", borderRadius: 10, color: "#444", border: "1px solid #e5e5e5",
               }}>{s}</span>
             ))}
@@ -118,15 +128,15 @@ export default function Landing() {
       </section>
 
       {/* ─── CONTACT ─── */}
-      <section style={{ background: "#1a1a1a", color: "#fafafa", padding: "100px 48px" }}>
+      <section style={{ background: "#1a1a1a", color: "#fafafa", padding: "80px var(--pad)" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <h2 style={{
-            fontSize: "clamp(36px, 5vw, 64px)", fontWeight: 900,
-            letterSpacing: "-0.03em", lineHeight: 1.1, marginBottom: 40,
+            fontSize: "clamp(28px, 5vw, 64px)", fontWeight: 900,
+            letterSpacing: "-0.03em", lineHeight: 1.1, marginBottom: 32,
           }}>
             Let's build something<br />together.
           </h2>
-          <div style={{ display: "flex", gap: 32, flexWrap: "wrap", fontSize: 16, fontWeight: 500 }}>
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 15, fontWeight: 500 }}>
             {[
               { label: "azikiwee@gmail.com", href: "mailto:azikiwee@gmail.com" },
               { label: "LinkedIn", href: "https://www.linkedin.com/in/zhelyoivanov/" },
@@ -143,7 +153,7 @@ export default function Landing() {
       </section>
 
       <footer style={{
-        background: "#1a1a1a", borderTop: "1px solid #333", padding: "20px 48px",
+        background: "#1a1a1a", borderTop: "1px solid #333", padding: "20px var(--pad)",
         display: "flex", justifyContent: "space-between", fontSize: 13, color: "#555",
       }}>
         <span>© 2026 Zhelyo Ivanov</span>
