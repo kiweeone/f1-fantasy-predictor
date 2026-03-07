@@ -34,7 +34,7 @@ export default function Landing() {
 
         @media (max-width: 768px) {
           :root { --pad: 32px; --title-size: clamp(48px, 14vw, 80px); --band-size: clamp(36px, 10vw, 64px); }
-          .hero-title { position: static !important; right: auto !important; top: auto !important; margin-top: 12px; }
+          .hero-title { display: none; }
         }
 
         .band{transition:all .35s cubic-bezier(.16,1,.3,1);display:flex;justify-content:space-between;align-items:center}
@@ -48,22 +48,16 @@ export default function Landing() {
 
       {/* ─── HERO ─── */}
       <section className="fu" style={{ padding: "var(--pad)", paddingTop: "calc(var(--pad) + 40px)", paddingBottom: 16 }}>
-        <div style={{ position: "relative", display: "inline-block" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h1 style={{
             fontSize: "var(--title-size)", fontWeight: 900, letterSpacing: "-0.04em",
             lineHeight: 0.95, color: "#1a1a1a",
           }}>
             Zhelyo Ivanov
           </h1>
-          {/* Title sits top-right of the name, superscript-style like actualidea.com */}
-          <div className="hero-title" style={{
-            position: "absolute", top: "-4px", right: "-220px",
-            fontSize: 13, fontWeight: 500, color: "#999", letterSpacing: 0.5,
-            lineHeight: 1.5, textAlign: "left",
-          }}>
-            <div>Chief Product Officer</div>
-            <div>Technical Product Leader</div>
-          </div>
+          <span className="hero-title" style={{ fontSize: 14, fontWeight: 500, color: "#999", flexShrink: 0 }}>
+            Chief Product Officer
+          </span>
         </div>
       </section>
 
