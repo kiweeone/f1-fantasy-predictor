@@ -30,10 +30,10 @@ export default function Landing() {
         .fu{animation:fadeUp .6s ease-out both}
 
         /* ─── RESPONSIVE VARS ─── */
-        :root { --pad: 48px; --band-dir: row; --hero-dir: row; --hero-align: flex-end; --role-mt: 0; --title-size: clamp(64px, 10vw, 130px); --band-size: clamp(48px, 7vw, 100px); }
+        :root { --pad: 48px; --band-dir: row; --hero-dir: row; --hero-align: flex-end; --role-mt: 0; --role-align: right; --title-size: clamp(64px, 10vw, 130px); --band-size: clamp(48px, 7vw, 100px); }
 
         @media (max-width: 768px) {
-          :root { --pad: 20px; --band-dir: column; --hero-dir: column; --hero-align: flex-start; --role-mt: 8px; --title-size: clamp(48px, 14vw, 80px); --band-size: clamp(36px, 10vw, 64px); }
+          :root { --pad: 32px; --band-dir: column; --hero-dir: column; --hero-align: flex-start; --role-mt: 12px; --role-align: left; --title-size: clamp(48px, 14vw, 80px); --band-size: clamp(36px, 10vw, 64px); }
         }
 
         .band{transition:all .35s cubic-bezier(.16,1,.3,1)}
@@ -53,7 +53,7 @@ export default function Landing() {
           }}>
             Zhelyo Ivanov
           </h1>
-          <div style={{ textAlign: "right", paddingBottom: 8, marginTop: "var(--role-mt)" }}>
+          <div style={{ textAlign: "var(--role-align)", paddingBottom: 8, marginTop: "var(--role-mt)" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#999", letterSpacing: 1, textTransform: "uppercase" }}>
               Chief Product Officer
             </div>
