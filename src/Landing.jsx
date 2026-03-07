@@ -36,7 +36,10 @@ export default function Landing() {
           :root { --pad: 32px; --band-dir: column; --hero-dir: column; --hero-align: flex-start; --role-mt: 12px; --role-align: left; --title-size: clamp(48px, 14vw, 80px); --band-size: clamp(36px, 10vw, 64px); }
         }
 
-        .band{transition:all .35s cubic-bezier(.16,1,.3,1)}
+        .band{transition:all .35s cubic-bezier(.16,1,.3,1);display:flex;justify-content:space-between;align-items:center}
+        @media (max-width: 768px) {
+          .band{flex-direction:column!important;align-items:flex-start!important;gap:6px!important}
+        }
         @media (min-width: 769px) {
           .band:hover{padding-top:56px;padding-bottom:56px}
         }
@@ -79,10 +82,8 @@ export default function Landing() {
               onMouseEnter={() => setHov(i)}
               onMouseLeave={() => setHov(null)}
               style={{
-                display: "flex", flexDirection: "var(--band-dir)", justifyContent: "space-between",
-                alignItems: "var(--band-dir)" === "column" ? "flex-start" : "center",
                 padding: "36px var(--pad)", background: p.bg, color: p.color,
-                cursor: isLink ? "pointer" : "default", gap: 8,
+                cursor: isLink ? "pointer" : "default",
               }}
             >
               <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
