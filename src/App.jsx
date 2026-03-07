@@ -559,27 +559,31 @@ export default function App() {
 
               {/* Driver table */}
               <div style={{ background: card, borderRadius: 16, overflow: "hidden", border: `1px solid ${border}` }}>
-                <div style={{ display: "grid", gridTemplateColumns: "44px 1fr 36px 100px 90px 80px 80px 80px", padding: "14px 20px", background: card2, fontSize: 12, fontWeight: 700, color: sub, textTransform: "uppercase", letterSpacing: 0.5, alignItems: "center" }}>
-                  <span>Pos</span><span>Driver</span><span>Tyre</span><span>Best Lap</span><span>Top Speed</span><span>S1</span><span>S2</span><span>S3</span>
-                </div>
-                {statsList.map((d, i) => (
-                  <div key={d.id} style={{ display: "grid", gridTemplateColumns: "44px 1fr 36px 100px 90px 80px 80px 80px", padding: "14px 20px", borderTop: `1px solid ${border}`, alignItems: "center", background: i < 3 ? `${TC(d.team)}08` : "transparent" }}>
-                    <span style={{ fontSize: 18, fontWeight: 800, color: i < 3 ? "#fff" : sub }}>{d.position}</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 4, height: 28, borderRadius: 2, background: TC(d.team) }} />
-                      <div>
-                        <div style={{ fontSize: 15, fontWeight: 700 }}>{d.name}</div>
-                        <div style={{ fontSize: 12, color: sub }}>{T(d.team)?.name} · ${d.price}M</div>
-                      </div>
+                <div style={{ overflowX: "auto" }}>
+                  <div style={{ minWidth: 720 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "48px 1fr 44px 110px 100px 85px 85px 85px", padding: "14px 20px", background: card2, fontSize: 12, fontWeight: 700, color: sub, textTransform: "uppercase", letterSpacing: 0.5, alignItems: "center" }}>
+                      <span>Pos</span><span>Driver</span><span>Tyre</span><span>Best Lap</span><span>Top Speed</span><span>S1</span><span>S2</span><span>S3</span>
                     </div>
-                    <TyreBadge compound={d.bestLapTyre} />
-                    <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(d.bestLap)}</span>
-                    <span style={{ fontSize: 14, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmtSpd(d.topSpeed)}</span>
-                    <span style={{ fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmt(d.sector1)}</span>
-                    <span style={{ fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmt(d.sector2)}</span>
-                    <span style={{ fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmt(d.sector3)}</span>
+                    {statsList.map((d, i) => (
+                      <div key={d.id} style={{ display: "grid", gridTemplateColumns: "48px 1fr 44px 110px 100px 85px 85px 85px", padding: "14px 20px", borderTop: `1px solid ${border}`, alignItems: "center", background: i < 3 ? `${TC(d.team)}08` : "transparent" }}>
+                        <span style={{ fontSize: 18, fontWeight: 800, color: i < 3 ? "#fff" : sub }}>{d.position}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ width: 4, height: 28, borderRadius: 2, background: TC(d.team) }} />
+                          <div>
+                            <div style={{ fontSize: 15, fontWeight: 700 }}>{d.name}</div>
+                            <div style={{ fontSize: 12, color: sub }}>{T(d.team)?.name} · ${d.price}M</div>
+                          </div>
+                        </div>
+                        <TyreBadge compound={d.bestLapTyre} />
+                        <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(d.bestLap)}</span>
+                        <span style={{ fontSize: 14, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmtSpd(d.topSpeed)}</span>
+                        <span style={{ fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmt(d.sector1)}</span>
+                        <span style={{ fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmt(d.sector2)}</span>
+                        <span style={{ fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmt(d.sector3)}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
             </>)}
           </div>
@@ -677,9 +681,9 @@ export default function App() {
         {tab === "predictor" && (
           <div className="fi">
             {!hasData ? <div style={{ textAlign: "center", padding: 60, color: sub }}>Load data first</div> : (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "start" }}>
+              <div style={{ display: "flex", gap: 32, alignItems: "flex-start", flexWrap: "wrap" }}>
                 {/* LEFT: Predictor */}
-                <div>
+                <div style={{ flex: "1 1 440px", minWidth: 0 }}>
                   <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 20 }}>Predictor</div>
 
                   {/* Session weights */}
@@ -740,7 +744,7 @@ export default function App() {
                 </div>
 
                 {/* RIGHT: Optimizer */}
-                <div>
+                <div style={{ flex: "1 1 400px", minWidth: 0 }}>
                   <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 20 }}>Optimizer</div>
                   <div style={{ fontSize: 14, color: sub, marginBottom: 16 }}>Top 5 lineups under $100M</div>
 
@@ -777,8 +781,9 @@ export default function App() {
         )}
       </div>
 
-      <div style={{ borderTop: `1px solid ${border}`, padding: "20px 24px", textAlign: "center", marginTop: 40 }}>
-        <div style={{ fontSize: 12, color: sub }}>F1 Fantasy Predictor · 2026 · Powered by OpenF1</div>
+      <div style={{ borderTop: `1px solid ${border}`, padding: "24px 24px", textAlign: "center", marginTop: 40 }}>
+        <div style={{ fontSize: 12, color: sub, marginBottom: 6 }}>F1 Fantasy Predictor · 2026 · Powered by OpenF1</div>
+        <div style={{ fontSize: 13, color: sub, fontWeight: 600 }}>Built by <span style={{ color: txt }}>kiweeone</span></div>
       </div>
     </div>
   );
