@@ -34,7 +34,6 @@ export default function Landing() {
 
         @media (max-width: 768px) {
           :root { --pad: 32px; --title-size: clamp(48px, 14vw, 80px); --band-size: clamp(36px, 10vw, 64px); }
-          .hero-title { display: none; }
         }
 
         .band{transition:all .35s cubic-bezier(.16,1,.3,1);display:flex;justify-content:space-between;align-items:center}
@@ -48,7 +47,7 @@ export default function Landing() {
 
       {/* ─── HERO ─── */}
       <section className="fu" style={{ padding: "var(--pad)", paddingTop: "calc(var(--pad) + 40px)", paddingBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <h1 style={{
             fontSize: "var(--title-size)", fontWeight: 900, letterSpacing: "-0.04em",
             lineHeight: 0.95, color: "#1a1a1a",
