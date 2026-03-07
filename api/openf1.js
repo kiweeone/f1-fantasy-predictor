@@ -1,20 +1,46 @@
 // /api/openf1.js
 // Vercel Serverless Function — OpenF1 Authenticated Proxy
 //
-// This function:
-// 1. Gets an OAuth2 token from OpenF1 using credentials stored in env vars
-// 2. Proxies the requested API path with the Bearer token
-// 3. Caches the token in memory until it expires
+// Security:
+// 1. Origin/Referer check — only allows requests from your domain
+// 2. Path validation — only allows /v1/ OpenF1 endpoints
+// 3. Rate limiting — max 60 requests per minute per IP
+// 4. CORS restricted to your domain
+// 5. Token cached server-side, never exposed to client
 //
-// Environment Variables needed (set in Vercel Dashboard):
+// Environment Variables (set in Vercel Dashboard):
 //   OPENF1_USERNAME — your OpenF1 email
 //   OPENF1_PASSWORD — your OpenF1 password
 
+// ─── ALLOWED ORIGINS ───
+// Add your domain(s) here
+const ALLOWED_ORIGINS = [
+  "https://kiwee.one",
+  "https://www.kiwee.one",
+  "http://localhost:5173",  // Vite dev server
+  "http://localhost:3000",
+];
+
+// ─── RATE LIMITER (in-memory, resets on cold start) ───
+const rateLimit = {};
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX = 60; // max requests per window per IP
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  if (!rateLimit[ip] || now - rateLimit[ip].start > RATE_LIMIT_WINDOW) {
+    rateLimit[ip] = { start: now, count: 1 };
+    return true;
+  }
+  rateLimit[ip].count++;
+  return rateLimit[ip].count <= RATE_LIMIT_MAX;
+}
+
+// ─── TOKEN CACHE ───
 let cachedToken = null;
 let tokenExpiry = 0;
 
 async function getToken() {
-  // Return cached token if still valid (with 60s buffer)
   if (cachedToken && Date.now() < tokenExpiry - 60000) {
     return cachedToken;
   }
@@ -43,19 +69,17 @@ async function getToken() {
 
   const data = await response.json();
   cachedToken = data.access_token;
-  // Token expires in seconds, convert to ms timestamp
   tokenExpiry = Date.now() + (parseInt(data.expires_in) || 3600) * 1000;
-
   return cachedToken;
 }
 
+// ─── HANDLER ───
 export default async function handler(req, res) {
-  // CORS headers — allow your domain
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
+  // 1. Only allow GET requests
   if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     return res.status(200).end();
   }
 
@@ -63,23 +87,48 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // The 'path' query param tells us which OpenF1 endpoint to call
-  // e.g. /api/openf1?path=/v1/sessions?year=2026&meeting_key=latest
+  // 2. Origin / Referer check
+  const origin = req.headers.origin || "";
+  const referer = req.headers.referer || "";
+  const isAllowed = ALLOWED_ORIGINS.some(o => origin.startsWith(o) || referer.startsWith(o));
+
+  // Also allow server-side rendering / direct Vercel function calls (no origin)
+  const isServerSide = !origin && !referer;
+
+  if (!isAllowed && !isServerSide) {
+    return res.status(403).json({ error: "Forbidden: origin not allowed" });
+  }
+
+  // Set CORS for allowed origin
+  if (origin && ALLOWED_ORIGINS.some(o => origin.startsWith(o))) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  // 3. Rate limiting
+  const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
+  if (!checkRateLimit(ip)) {
+    return res.status(429).json({ error: "Too many requests. Max 60/minute." });
+  }
+
+  // 4. Validate path parameter
   const { path } = req.query;
 
   if (!path) {
-    return res.status(400).json({
-      error: "Missing 'path' query parameter",
-      example: "/api/openf1?path=/v1/sessions?year=2026",
-    });
+    return res.status(400).json({ error: "Missing 'path' query parameter" });
+  }
+
+  // Only allow /v1/ endpoints — prevent path traversal or token endpoint abuse
+  if (!path.startsWith("/v1/")) {
+    return res.status(400).json({ error: "Invalid path. Only /v1/ endpoints are allowed." });
+  }
+
+  // Block attempts to access the token endpoint through the proxy
+  if (path.includes("token") || path.includes("auth")) {
+    return res.status(400).json({ error: "Access denied." });
   }
 
   try {
     const token = await getToken();
-
-    // Build the full OpenF1 URL
-    // The path comes in as: /v1/sessions?year=2026&meeting_key=latest
-    // But Vercel parses query params, so we need to reconstruct
     const url = `https://api.openf1.org${path}`;
 
     const apiResponse = await fetch(url, {
@@ -99,8 +148,11 @@ export default async function handler(req, res) {
 
     const data = await apiResponse.json();
 
-    // Cache for 30 seconds (helps with rapid refreshes during live sessions)
+    // Cache for 30 seconds
     res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=60");
+    // Security headers
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
 
     return res.status(200).json(data);
   } catch (error) {
