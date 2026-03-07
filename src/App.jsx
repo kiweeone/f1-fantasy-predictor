@@ -307,12 +307,11 @@ function computeCoefficients(sessionData, sessionWeights, signalConfig) {
 function optimizeLineups(coefficients, topN = 5) {
   const sorted = Object.entries(coefficients).sort((a, b) => b[1].composite - a[1].composite);
   const dScores = {};
-  sorted.forEach(([id, c], i) => {
+  sorted.forEach(([id, c]) => {
     const d = DRIVERS.find(x => x.id === id);
     if (d) dScores[id] = { pts: Math.max(0, Math.round(c.composite * 50)), ppm: (c.composite * 50) / d.price };
   });
 
-  const sD = DRIVERS.map(d => ({ ...d, projPts: dScores[d.id]?.pts || 0, projPPM: dScores[d.id]?.ppm || 0 })).sort((a, b) => b.projPPM - a.projPPM);
   const sC = TEAMS.map(t => {
     const tds = DRIVERS.filter(d => d.team === t.id);
     const pts = tds.reduce((s, d) => s + (dScores[d.id]?.pts || 0), 0);
@@ -323,25 +322,38 @@ function optimizeLineups(coefficients, topN = 5) {
   for (let i = 0; i < sC.length; i++) for (let j = i + 1; j < sC.length; j++) cP.push([sC[i], sC[j]]);
   cP.sort((a, b) => (b[0].projPts + b[1].projPts) - (a[0].projPts + a[1].projPts));
 
+  // Try multiple sorting strategies to produce diverse lineups
+  const strategies = [
+    // Strategy 1: Points-first (pick highest scorers that fit budget)
+    [...DRIVERS].map(d => ({ ...d, projPts: dScores[d.id]?.pts || 0, projPPM: dScores[d.id]?.ppm || 0 })).sort((a, b) => b.projPts - a.projPts),
+    // Strategy 2: Balanced (70% points, 30% PPM)
+    [...DRIVERS].map(d => ({ ...d, projPts: dScores[d.id]?.pts || 0, projPPM: dScores[d.id]?.ppm || 0 })).sort((a, b) => (b.projPts * 0.7 + b.projPPM * 10 * 0.3) - (a.projPts * 0.7 + a.projPPM * 10 * 0.3)),
+    // Strategy 3: PPM-first (value picks)
+    [...DRIVERS].map(d => ({ ...d, projPts: dScores[d.id]?.pts || 0, projPPM: dScores[d.id]?.ppm || 0 })).sort((a, b) => b.projPPM - a.projPPM),
+  ];
+
   const lns = [];
-  cP.slice(0, 15).forEach(([c1, c2]) => {
-    const cc = c1.price + c2.price, cp = c1.projPts + c2.projPts, bl = 100 - cc;
-    const pk = []; let sp = 0; const av = [...sD];
-    for (let r = 0; r < 5; r++) {
-      let bi = -1, bs = -Infinity;
-      for (let i = 0; i < av.length; i++) {
-        const d = av[i]; if (sp + d.price > bl) continue;
-        if ((4 - r) > 0 && sp + d.price + (4 - r) * 5 > bl) continue;
-        const sc = d.projPts * 0.6 + d.projPPM * 20 * 0.4;
-        if (sc > bs) { bs = sc; bi = i; }
+  strategies.forEach(sD => {
+    cP.slice(0, 10).forEach(([c1, c2]) => {
+      const cc = c1.price + c2.price, cp = c1.projPts + c2.projPts, bl = 100 - cc;
+      const pk = []; let sp = 0; const av = [...sD];
+      for (let r = 0; r < 5; r++) {
+        let bi = -1, bs = -Infinity;
+        for (let i = 0; i < av.length; i++) {
+          const d = av[i]; if (sp + d.price > bl) continue;
+          if ((4 - r) > 0 && sp + d.price + (4 - r) * 5 > bl) continue;
+          // Score: primarily raw points, minor PPM bonus
+          const sc = d.projPts * 0.8 + d.projPPM * 5 * 0.2;
+          if (sc > bs) { bs = sc; bi = i; }
+        }
+        if (bi >= 0) { pk.push(av[bi]); sp += av[bi].price; av.splice(bi, 1); }
       }
-      if (bi >= 0) { pk.push(av[bi]); sp += av[bi].price; av.splice(bi, 1); }
-    }
-    if (pk.length === 5) {
-      const dp = pk.reduce((s, d) => s + d.projPts, 0);
-      const bd = pk.reduce((b, d) => d.projPts > b.projPts ? d : b, pk[0]);
-      lns.push({ drivers: pk, constructors: [c1, c2], totalCost: +(sp + cc).toFixed(1), boostedPoints: dp + cp + bd.projPts, boostDriver: bd.id, driverPts: dp, constructorPts: cp });
-    }
+      if (pk.length === 5) {
+        const dp = pk.reduce((s, d) => s + d.projPts, 0);
+        const bd = pk.reduce((b, d) => d.projPts > b.projPts ? d : b, pk[0]);
+        lns.push({ drivers: pk, constructors: [c1, c2], totalCost: +(sp + cc).toFixed(1), boostedPoints: dp + cp + bd.projPts, boostDriver: bd.id, driverPts: dp, constructorPts: cp });
+      }
+    });
   });
 
   const seen = new Set();
@@ -404,8 +416,13 @@ export default function App() {
         addLog(`Loading ${ses.toUpperCase()}...`);
         try {
           data[ses] = await loadSession(sk, (m, t) => addLog(`  ${ses.toUpperCase()}: ${m}`, t));
-          fetched[ses] = true;
-          addLog(`${ses.toUpperCase()}: ${Object.keys(data[ses]).length} drivers processed`, "success");
+          const driverCount = Object.keys(data[ses]).length;
+          if (driverCount > 0) {
+            fetched[ses] = true;
+            addLog(`${ses.toUpperCase()}: ${driverCount} drivers processed`, "success");
+          } else {
+            addLog(`${ses.toUpperCase()}: No valid driver data found (session may still be processing)`, "error");
+          }
         } catch (e) { addLog(`${ses.toUpperCase()}: ${e.message}`, "error"); }
       }
       setSessionData(data);
@@ -699,95 +716,105 @@ export default function App() {
         {/* ═══ PREDICTOR + OPTIMIZER ═══ */}
         {tab === "predictor" && (
           <div className="fi">
-            {!hasData ? <div style={{ textAlign: "center", padding: 60, color: sub }}>Load data first</div> : (
-              <div style={{ display: "flex", gap: 32, alignItems: "flex-start", flexWrap: "wrap" }}>
-                {/* LEFT: Predictor */}
-                <div style={{ flex: "1 1 440px", minWidth: 0 }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 20 }}>Predictor</div>
+            {!hasData ? <div style={{ textAlign: "center", padding: 60, color: sub }}>Load data first</div> : (<>
+              <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 20 }}>Predictor</div>
 
-                  {/* Session weights */}
-                  <div style={{ background: card, borderRadius: 16, padding: 20, marginBottom: 16, border: `1px solid ${border}` }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: sub, marginBottom: 12 }}>SESSION WEIGHTS</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                      {availableSessions.filter(s => s.startsWith("fp")).map(s => (
-                        <div key={s} style={{ textAlign: "center" }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#FF8000", marginBottom: 4 }}>{s.toUpperCase()}</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>{sesWeights[s] || 0}%</div>
-                          <input type="range" min={0} max={100} value={sesWeights[s] || 0} onChange={e => setSesWeights(p => ({ ...p, [s]: parseInt(e.target.value) }))} style={{ width: "100%", accentColor: "#FF8000" }} />
+              {/* Session weights — full width */}
+              <div style={{ background: card, borderRadius: 16, padding: 24, marginBottom: 20, border: `1px solid ${border}` }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: sub, marginBottom: 14 }}>SESSION WEIGHTS</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+                  {["fp1", "fp2", "fp3"].map(s => {
+                    const available = availableSessions.includes(s);
+                    return (
+                      <div key={s} style={{ textAlign: "center", opacity: available ? 1 : 0.3 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#FF8000", marginBottom: 6 }}>{s.toUpperCase()}{!available && " ·"}</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>{sesWeights[s] || 0}%</div>
+                        <input type="range" min={0} max={100} value={sesWeights[s] || 0} onChange={e => available && setSesWeights(p => ({ ...p, [s]: parseInt(e.target.value) }))} disabled={!available} style={{ width: "100%", accentColor: "#FF8000", cursor: available ? "pointer" : "default" }} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Signals — full width, 2-column grid */}
+              <div style={{ background: card, borderRadius: 16, padding: 24, marginBottom: 20, border: `1px solid ${border}` }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: sub, marginBottom: 14 }}>SIGNALS</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 8 }}>
+                  {SIGNALS.map(sig => {
+                    const conf = sigConfig.find(s => s.key === sig.key);
+                    return (
+                      <div key={sig.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: conf.on ? card2 : "transparent", borderRadius: 10, border: `1px solid ${conf.on ? border : "transparent"}`, opacity: conf.on ? 1 : 0.4 }}>
+                        <div onClick={() => toggleSig(sig.key)} style={{ width: 44, height: 24, borderRadius: 12, background: conf.on ? sig.color : card2, position: "relative", cursor: "pointer", flexShrink: 0 }}>
+                          <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: conf.on ? 22 : 2, transition: "all 0.2s" }} />
                         </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Signals */}
-                  <div style={{ background: card, borderRadius: 16, padding: 20, marginBottom: 16, border: `1px solid ${border}` }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: sub, marginBottom: 12 }}>SIGNALS</div>
-                    {SIGNALS.map(sig => {
-                      const conf = sigConfig.find(s => s.key === sig.key);
-                      return (
-                        <div key={sig.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: `1px solid ${border}`, opacity: conf.on ? 1 : 0.4 }}>
-                          <div onClick={() => toggleSig(sig.key)} style={{ width: 40, height: 22, borderRadius: 11, background: conf.on ? sig.color : card2, position: "relative", cursor: "pointer", flexShrink: 0 }}>
-                            <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: conf.on ? 20 : 2, transition: "all 0.2s" }} />
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 14, fontWeight: 600 }}>{sig.label}</div>
-                            <div style={{ fontSize: 11, color: sub }}>{sig.desc}</div>
-                          </div>
-                          {conf.on && <div style={{ display: "flex", alignItems: "center", gap: 6, width: 100 }}>
-                            <input type="range" min={1} max={40} value={conf.weight} onChange={e => setSigW(sig.key, parseInt(e.target.value))} style={{ flex: 1, accentColor: sig.color }} />
-                            <span style={{ fontSize: 13, fontWeight: 700, color: sig.color, width: 28, textAlign: "right" }}>{conf.weight}</span>
-                          </div>}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600 }}>{sig.label}</div>
+                          <div style={{ fontSize: 11, color: sub }}>{sig.desc}</div>
                         </div>
-                      );
-                    })}
-                  </div>
+                        {conf.on && <div style={{ display: "flex", alignItems: "center", gap: 8, width: 110, flexShrink: 0 }}>
+                          <input type="range" min={1} max={40} value={conf.weight} onChange={e => setSigW(sig.key, parseInt(e.target.value))} style={{ flex: 1, accentColor: sig.color }} />
+                          <span style={{ fontSize: 14, fontWeight: 700, color: sig.color, width: 30, textAlign: "right" }}>{conf.weight}</span>
+                        </div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-                  {/* Rankings */}
+              {/* Two columns: Ranking + Optimizer */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 24 }}>
+                {/* Predicted Ranking */}
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Predicted Ranking</div>
                   <div style={{ background: card, borderRadius: 16, overflow: "hidden", border: `1px solid ${border}` }}>
-                    <div style={{ padding: "14px 20px", background: card2, fontSize: 14, fontWeight: 700, color: sub }}>PREDICTED RANKING</div>
                     {rankedPrediction.filter(d => d.coeff > 0).map((d, i) => (
-                      <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderTop: `1px solid ${border}` }}>
-                        <span style={{ fontSize: 16, fontWeight: 800, color: i < 3 ? "#fff" : sub, width: 28 }}>{i + 1}</span>
-                        <div style={{ width: 4, height: 24, borderRadius: 2, background: TC(d.team) }} />
+                      <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", borderTop: i > 0 ? `1px solid ${border}` : "none", background: i < 3 ? `${TC(d.team)}08` : "transparent" }}>
+                        <span style={{ fontSize: 18, fontWeight: 800, color: i < 3 ? "#fff" : sub, width: 32, textAlign: "center" }}>{i + 1}</span>
+                        <div style={{ width: 4, height: 28, borderRadius: 2, background: TC(d.team) }} />
                         <div style={{ flex: 1 }}>
-                          <span style={{ fontSize: 14, fontWeight: 700 }}>{d.name.split(" ").pop()}</span>
-                          <span style={{ fontSize: 12, color: sub, marginLeft: 8 }}>{T(d.team)?.name}</span>
+                          <div style={{ fontSize: 15, fontWeight: 700 }}>{d.name}</div>
+                          <div style={{ fontSize: 12, color: sub }}>{T(d.team)?.name} · ${d.price}M</div>
                         </div>
-                        <div style={{ width: 80, height: 6, background: card2, borderRadius: 3, overflow: "hidden" }}>
+                        <div style={{ width: 100, height: 6, background: card2, borderRadius: 3, overflow: "hidden" }}>
                           <div style={{ height: "100%", width: `${(d.coeff / maxCoeff) * 100}%`, background: TC(d.team), borderRadius: 3 }} />
                         </div>
-                        <span style={{ fontSize: 14, fontWeight: 700, width: 40, textAlign: "right" }}>{(d.coeff * 100).toFixed(0)}</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, width: 44, textAlign: "right" }}>{(d.coeff * 100).toFixed(0)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* RIGHT: Optimizer */}
-                <div style={{ flex: "1 1 400px", minWidth: 0 }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 20 }}>Optimizer</div>
-                  <div style={{ fontSize: 14, color: sub, marginBottom: 16 }}>Top 5 lineups under $100M</div>
-
+                {/* Optimizer */}
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Optimizer</div>
+                  <div style={{ fontSize: 13, color: sub, marginBottom: 12 }}>Top 5 lineups under $100M</div>
                   {topLineups.map((lu, li) => { const best = li === 0; return (
                     <div key={li} style={{ background: card, borderRadius: 16, padding: 20, marginBottom: 12, border: `2px solid ${best ? "#00d26a" : border}`, position: "relative" }}>
                       {best && <div style={{ position: "absolute", top: -1, right: 16, background: "#00d26a", color: "#000", fontSize: 11, fontWeight: 800, padding: "4px 12px", borderRadius: "0 0 8px 8px" }}>BEST</div>}
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                        <span style={{ fontSize: 16, fontWeight: 800, color: best ? "#00d26a" : sub }}>#{li + 1}</span>
+                        <span style={{ fontSize: 18, fontWeight: 800, color: best ? "#00d26a" : sub }}>#{li + 1}</span>
                         <div style={{ textAlign: "right" }}>
-                          <div style={{ fontSize: 22, fontWeight: 800, color: best ? "#00d26a" : "#FF8000" }}>{lu.boostedPoints} pts</div>
-                          <div style={{ fontSize: 11, color: sub }}>${lu.totalCost}M</div>
+                          <div style={{ fontSize: 24, fontWeight: 800, color: best ? "#00d26a" : "#FF8000" }}>{lu.boostedPoints} pts</div>
+                          <div style={{ fontSize: 12, color: sub }}>${lu.totalCost}M</div>
                         </div>
                       </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                        {lu.drivers.map(d => <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", background: `${TC(d.team)}22`, borderRadius: 6, fontSize: 12, fontWeight: 700 }}><div style={{ width: 3, height: 14, borderRadius: 2, background: TC(d.team) }} />{d.name.split(" ").pop()} {d.id === lu.boostDriver && <span style={{ fontSize: 9, background: accent, color: "#fff", padding: "1px 4px", borderRadius: 3 }}>2x</span>}</div>)}
+                      <div style={{ fontSize: 11, fontWeight: 700, color: sub, marginBottom: 6 }}>DRIVERS</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                        {lu.drivers.map(d => <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", background: `${TC(d.team)}22`, border: `1px solid ${TC(d.team)}44`, borderRadius: 8, fontSize: 13, fontWeight: 600 }}><div style={{ width: 3, height: 16, borderRadius: 2, background: TC(d.team) }} />{d.name.split(" ").pop()}<span style={{ color: sub, fontSize: 11 }}>${d.price}M</span>{d.id === lu.boostDriver && <span style={{ fontSize: 9, background: accent, color: "#fff", padding: "2px 5px", borderRadius: 4, fontWeight: 800 }}>2x</span>}</div>)}
                       </div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: sub, marginBottom: 6 }}>CONSTRUCTORS</div>
                       <div style={{ display: "flex", gap: 6 }}>
-                        {lu.constructors.map(c => <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", background: `${c.color}22`, borderRadius: 6, fontSize: 12, fontWeight: 700 }}><div style={{ width: 3, height: 14, borderRadius: 2, background: c.color }} />{c.name}</div>)}
+                        {lu.constructors.map(c => <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", background: `${c.color}22`, border: `1px solid ${c.color}44`, borderRadius: 8, fontSize: 13, fontWeight: 600 }}><div style={{ width: 3, height: 16, borderRadius: 2, background: c.color }} />{c.name}<span style={{ color: sub, fontSize: 11 }}>${c.price}M</span></div>)}
+                      </div>
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ height: 4, background: bg, borderRadius: 2, overflow: "hidden" }}><div style={{ height: "100%", width: `${(lu.totalCost / 100) * 100}%`, background: "linear-gradient(90deg, #00d26a, #00ff88)", borderRadius: 2 }} /></div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3, fontSize: 11, color: sub }}><span>${lu.totalCost}M used</span><span>${(100 - lu.totalCost).toFixed(1)}M free</span></div>
                       </div>
                     </div>
                   ); })}
                 </div>
               </div>
-            )}
+            </>)}
           </div>
         )}
 
