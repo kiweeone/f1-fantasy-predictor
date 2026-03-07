@@ -198,8 +198,8 @@ async function loadSession(sk, addLog) {
     const mean = topLaps.reduce((a, b) => a + b, 0) / topLaps.length;
     const consistency = Math.sqrt(topLaps.reduce((a, b) => a + (b - mean) ** 2, 0) / topLaps.length);
 
-    // Speed trap from laps data (st_speed) or car data
-    const lapSpeeds = validLaps.filter(l => l.st_speed > 0).map(l => l.st_speed);
+    // Speed trap from laps data (st_speed, i1_speed, i2_speed) or car data
+    const lapSpeeds = validLaps.flatMap(l => [l.st_speed || 0, l.i1_speed || 0, l.i2_speed || 0]).filter(v => v > 0);
     const topSpeed = Math.max(speeds[dn] || 0, ...lapSpeeds, 0);
 
     // All lap data for line chart
@@ -550,39 +550,55 @@ export default function App() {
             </div>
 
             {!hasData ? <div style={{ textAlign: "center", padding: 60, color: sub, fontSize: 16 }}>Click "Fetch Data" to load session results</div> : (<>
-              {/* Session toggle */}
+              {/* Session toggle — show all expected, grey out unavailable */}
               <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
-                {availableSessions.map(s => (
-                  <button key={s} onClick={() => setStatsSession(s)} style={pill(statsSession === s, s.includes("fp") ? "#FF8000" : s === "quali" ? "#a855f7" : "#00d26a")}>{s.toUpperCase()}</button>
-                ))}
+                {["fp1", "fp2", "fp3", "quali", "race"].map(s => {
+                  const available = availableSessions.includes(s);
+                  const active = statsSession === s;
+                  return (
+                    <button key={s} onClick={() => available && setStatsSession(s)} style={{ ...pill(active, s.startsWith("fp") ? "#FF8000" : s === "quali" ? "#a855f7" : "#00d26a"), opacity: available ? 1 : 0.3, cursor: available ? "pointer" : "default" }}>
+                      {s.toUpperCase()}{!available && " ·"}
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Driver table */}
+              {/* Driver table — using HTML table for proper column alignment */}
               <div style={{ background: card, borderRadius: 16, overflow: "hidden", border: `1px solid ${border}` }}>
                 <div style={{ overflowX: "auto" }}>
-                  <div style={{ minWidth: 720 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "48px 1fr 44px 110px 100px 85px 85px 85px", padding: "14px 20px", background: card2, fontSize: 12, fontWeight: 700, color: sub, textTransform: "uppercase", letterSpacing: 0.5, alignItems: "center" }}>
-                      <span>Pos</span><span>Driver</span><span>Tyre</span><span>Best Lap</span><span>Top Speed</span><span>S1</span><span>S2</span><span>S3</span>
-                    </div>
-                    {statsList.map((d, i) => (
-                      <div key={d.id} style={{ display: "grid", gridTemplateColumns: "48px 1fr 44px 110px 100px 85px 85px 85px", padding: "14px 20px", borderTop: `1px solid ${border}`, alignItems: "center", background: i < 3 ? `${TC(d.team)}08` : "transparent" }}>
-                        <span style={{ fontSize: 18, fontWeight: 800, color: i < 3 ? "#fff" : sub }}>{d.position}</span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div style={{ width: 4, height: 28, borderRadius: 2, background: TC(d.team) }} />
-                          <div>
-                            <div style={{ fontSize: 15, fontWeight: 700 }}>{d.name}</div>
-                            <div style={{ fontSize: 12, color: sub }}>{T(d.team)?.name} · ${d.price}M</div>
-                          </div>
-                        </div>
-                        <TyreBadge compound={d.bestLapTyre} />
-                        <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(d.bestLap)}</span>
-                        <span style={{ fontSize: 14, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmtSpd(d.topSpeed)}</span>
-                        <span style={{ fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmt(d.sector1)}</span>
-                        <span style={{ fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmt(d.sector2)}</span>
-                        <span style={{ fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums" }}>{fmt(d.sector3)}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <table style={{ width: "100%", minWidth: 780, borderCollapse: "collapse", fontFamily: font }}>
+                    <thead>
+                      <tr style={{ background: card2 }}>
+                        {["POS", "DRIVER", "TYRE", "BEST LAP", "TOP SPEED", "S1", "S2", "S3"].map((h, i) => (
+                          <th key={h} style={{ padding: "14px 16px", fontSize: 12, fontWeight: 700, color: sub, textTransform: "uppercase", letterSpacing: 0.5, textAlign: i === 0 ? "center" : "left", whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {statsList.map((d, i) => (
+                        <tr key={d.id} style={{ borderTop: `1px solid ${border}`, background: i < 3 ? `${TC(d.team)}08` : "transparent" }}>
+                          <td style={{ padding: "14px 16px", textAlign: "center", fontSize: 18, fontWeight: 800, color: i < 3 ? "#fff" : sub, width: 48 }}>{d.position}</td>
+                          <td style={{ padding: "14px 16px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <div style={{ width: 4, height: 28, borderRadius: 2, background: TC(d.team), flexShrink: 0 }} />
+                              <div>
+                                <div style={{ fontSize: 15, fontWeight: 700, color: txt }}>{d.name}</div>
+                                <div style={{ fontSize: 12, color: sub }}>{T(d.team)?.name} · ${d.price}M</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: "14px 16px", width: 48 }}>
+                            {d.bestLapTyre ? <TyreBadge compound={d.bestLapTyre} /> : <span style={{ color: border }}>—</span>}
+                          </td>
+                          <td style={{ padding: "14px 16px", fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", width: 110 }}>{fmt(d.bestLap)}</td>
+                          <td style={{ padding: "14px 16px", fontSize: 14, color: sub, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", width: 110 }}>{d.topSpeed > 0 ? fmtSpd(d.topSpeed) : "—"}</td>
+                          <td style={{ padding: "14px 12px", fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", width: 80 }}>{fmt(d.sector1)}</td>
+                          <td style={{ padding: "14px 12px", fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", width: 80 }}>{fmt(d.sector2)}</td>
+                          <td style={{ padding: "14px 12px", fontSize: 13, color: sub, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", width: 80 }}>{fmt(d.sector3)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </>)}
@@ -595,7 +611,10 @@ export default function App() {
             {!hasData ? <div style={{ textAlign: "center", padding: 60, color: sub }}>Load data in Basic Stats first</div> : (<>
               {/* Session + driver toggles */}
               <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-                {availableSessions.map(s => <button key={s} onClick={() => setChartSession(s)} style={pill(chartSession === s, "#FF8000")}>{s.toUpperCase()}</button>)}
+                {["fp1", "fp2", "fp3", "quali", "race"].map(s => {
+                  const available = availableSessions.includes(s);
+                  return <button key={s} onClick={() => available && setChartSession(s)} style={{ ...pill(chartSession === s, "#FF8000"), opacity: available ? 1 : 0.3, cursor: available ? "pointer" : "default" }}>{s.toUpperCase()}{!available && " ·"}</button>;
+                })}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 24 }}>
                 {DRIVERS.filter(d => sessionData[chartSession]?.[d.id]).map(d => (
