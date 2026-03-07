@@ -30,10 +30,11 @@ export default function Landing() {
         .fu{animation:fadeUp .6s ease-out both}
 
         /* ─── RESPONSIVE VARS ─── */
-        :root { --pad: 48px; --band-dir: row; --hero-dir: row; --hero-align: flex-end; --role-mt: 0; --role-align: right; --title-size: clamp(64px, 10vw, 130px); --band-size: clamp(48px, 7vw, 100px); }
+        :root { --pad: 48px; --title-size: clamp(64px, 10vw, 130px); --band-size: clamp(48px, 7vw, 100px); }
 
         @media (max-width: 768px) {
-          :root { --pad: 32px; --band-dir: column; --hero-dir: column; --hero-align: flex-start; --role-mt: 12px; --role-align: left; --title-size: clamp(48px, 14vw, 80px); --band-size: clamp(36px, 10vw, 64px); }
+          :root { --pad: 32px; --title-size: clamp(48px, 14vw, 80px); --band-size: clamp(36px, 10vw, 64px); }
+          .hero-title { position: static !important; right: auto !important; top: auto !important; margin-top: 12px; }
         }
 
         .band{transition:all .35s cubic-bezier(.16,1,.3,1);display:flex;justify-content:space-between;align-items:center}
@@ -43,26 +44,25 @@ export default function Landing() {
         @media (min-width: 769px) {
           .band:hover{padding-top:56px;padding-bottom:56px}
         }
-        .band-arrow{transition:transform .3s ease,opacity .3s ease;opacity:0;transform:translateX(-10px)}
-        .band:hover .band-arrow{opacity:1;transform:translateX(0)}
       `}</style>
 
       {/* ─── HERO ─── */}
-      <section className="fu" style={{ padding: "var(--pad)", paddingTop: "calc(var(--pad) + 8px)", paddingBottom: 0 }}>
-        <div style={{ display: "flex", flexDirection: "var(--hero-dir)", justifyContent: "space-between", alignItems: "var(--hero-align)", gap: 8 }}>
+      <section className="fu" style={{ padding: "var(--pad)", paddingTop: "calc(var(--pad) + 40px)", paddingBottom: 16 }}>
+        <div style={{ position: "relative", display: "inline-block" }}>
           <h1 style={{
             fontSize: "var(--title-size)", fontWeight: 900, letterSpacing: "-0.04em",
             lineHeight: 0.95, color: "#1a1a1a",
           }}>
             Zhelyo Ivanov
           </h1>
-          <div style={{ textAlign: "var(--role-align)", paddingBottom: 8, marginTop: "var(--role-mt)" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#999", letterSpacing: 1, textTransform: "uppercase" }}>
-              Chief Product Officer
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#999", letterSpacing: 1, textTransform: "uppercase", marginTop: 2 }}>
-              Technical Product Leader
-            </div>
+          {/* Title sits top-right of the name, superscript-style like actualidea.com */}
+          <div className="hero-title" style={{
+            position: "absolute", top: "-4px", right: "-220px",
+            fontSize: 13, fontWeight: 500, color: "#999", letterSpacing: 0.5,
+            lineHeight: 1.5, textAlign: "left",
+          }}>
+            <div>Chief Product Officer</div>
+            <div>Technical Product Leader</div>
           </div>
         </div>
       </section>
@@ -102,10 +102,8 @@ export default function Landing() {
                   </span>
                 )}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, opacity: 0.7 }}>{p.role}</span>
-                {isLink && <span className="band-arrow" style={{ fontSize: 24, fontWeight: 300 }}>→</span>}
-              </div>
+              {/* Role text — right-aligned, vertically centered, no arrow */}
+              <span style={{ fontSize: 14, fontWeight: 500, opacity: 0.6 }}>{p.role}</span>
             </Wrapper>
           );
         })}
