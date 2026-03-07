@@ -514,18 +514,16 @@ export default function App() {
   const pill = (active, color) => ({ padding: "8px 18px", borderRadius: 20, background: active ? (color || accent) : card2, color: active ? "#fff" : sub, border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: font, transition: "all 0.2s" });
 
   return (
-    <div style={{ minHeight: "100vh", background: bg, color: txt, fontFamily: font }}>
-      <style>{`*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:${bg}}::-webkit-scrollbar-thumb{background:${border};border-radius:3px}@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.fi{animation:fi .3s ease}@keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin 1s linear infinite}input[type=range]{-webkit-appearance:none;height:4px;border-radius:2px;background:${border}}input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;cursor:pointer}`}</style>
+    <div style={{ minHeight: "100vh", background: bg, color: txt, fontFamily: font, overflowX: "hidden" }}>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:${bg}}::-webkit-scrollbar-thumb{background:${border};border-radius:3px}@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.fi{animation:fi .3s ease}@keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin 1s linear infinite}input[type=range]{-webkit-appearance:none;height:4px;border-radius:2px;background:${border}}input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;cursor:pointer}.tab-content{padding-bottom:90px}`}</style>
 
-      {/* ─── NAV ─── */}
-      <nav style={{ display: "flex", alignItems: "center", gap: 4, padding: "16px 24px", background: "#0a0a0a", borderBottom: `1px solid ${border}`, overflowX: "auto", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(20px)" }}>
-        <span style={{ fontSize: 18, fontWeight: 800, color: accent, marginRight: 16, letterSpacing: -0.5 }}>F1 Predictor</span>
-        {[["home","Home"],["stats","Basic Stats"],["charts","Charts"],["team","Team Builder"],["predictor","Predictor"],["old","Old UI"]].map(([k,l]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ ...pill(tab === k), whiteSpace: "nowrap", fontSize: 13 }}>{l}</button>
-        ))}
-      </nav>
+      {/* ─── HEADER ─── */}
+      <header style={{ padding: "20px 24px", background: "#0a0a0a", borderBottom: `1px solid ${border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 24, fontWeight: 900, color: accent, letterSpacing: -1 }}>F1 Predictor</span>
+        <span style={{ fontSize: 12, color: sub }}>{meeting.name ? `${meeting.name} GP` : "2026"}</span>
+      </header>
 
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px" }}>
+      <div className="tab-content" style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px" }}>
 
         {/* ═══ HOME ═══ */}
         {tab === "home" && (
@@ -595,6 +593,8 @@ export default function App() {
                 })}
               </div>
 
+              <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Session Results</div>
+
               {/* Driver table — using HTML table for proper column alignment */}
               <div style={{ background: card, borderRadius: 16, overflow: "hidden", border: `1px solid ${border}` }}>
                 <div style={{ overflowX: "auto" }}>
@@ -633,54 +633,67 @@ export default function App() {
                   </table>
                 </div>
               </div>
-            </>)}
-          </div>
-        )}
 
-        {/* ═══ CHARTS ═══ */}
-        {tab === "charts" && (
-          <div className="fi">
-            {!hasData ? <div style={{ textAlign: "center", padding: 60, color: sub }}>Load data in Basic Stats first</div> : (<>
-              {/* Session + driver toggles */}
-              <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+              {/* ─── CHARTS SECTION ─── */}
+              <div style={{ fontSize: 20, fontWeight: 700, marginTop: 32, marginBottom: 16 }}>Charts</div>
+
+              {/* Session + driver toggles for charts */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
                 {["fp1", "fp2", "fp3", "quali", "race"].map(s => {
                   const available = availableSessions.includes(s);
-                  return <button key={s} onClick={() => available && setChartSession(s)} style={{ ...pill(chartSession === s, "#FF8000"), opacity: available ? 1 : 0.3, cursor: available ? "pointer" : "default" }}>{s.toUpperCase()}{!available && " ·"}</button>;
+                  return <button key={`c${s}`} onClick={() => available && setChartSession(s)} style={{ ...pill(chartSession === s, "#FF8000"), opacity: available ? 1 : 0.3, cursor: available ? "pointer" : "default", fontSize: 12, padding: "6px 14px" }}>{s.toUpperCase()}{!available && " ·"}</button>;
                 })}
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 24 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 20 }}>
                 {DRIVERS.filter(d => sessionData[chartSession]?.[d.id]).map(d => (
-                  <button key={d.id} onClick={() => { if (chartDrivers.includes(d.id)) setChartDrivers(chartDrivers.filter(x => x !== d.id)); else if (chartDrivers.length < 6) setChartDrivers([...chartDrivers, d.id]); }} style={{ padding: "6px 14px", borderRadius: 8, background: chartDrivers.includes(d.id) ? `${TC(d.team)}33` : card2, border: `1.5px solid ${chartDrivers.includes(d.id) ? TC(d.team) : border}`, color: chartDrivers.includes(d.id) ? "#fff" : sub, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: font }}>{d.name.split(" ").pop()}</button>
+                  <button key={d.id} onClick={() => { if (chartDrivers.includes(d.id)) setChartDrivers(chartDrivers.filter(x => x !== d.id)); else if (chartDrivers.length < 6) setChartDrivers([...chartDrivers, d.id]); }} style={{ padding: "5px 12px", borderRadius: 8, background: chartDrivers.includes(d.id) ? `${TC(d.team)}33` : card2, border: `1.5px solid ${chartDrivers.includes(d.id) ? TC(d.team) : border}`, color: chartDrivers.includes(d.id) ? "#fff" : sub, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: font }}>{d.name.split(" ").pop()}</button>
                 ))}
               </div>
 
               {/* Radar */}
-              <div style={{ background: card, borderRadius: 16, padding: 24, marginBottom: 24, border: `1px solid ${border}` }}>
-                <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Signal Radar — {chartSession.toUpperCase()}</div>
-                <ResponsiveContainer width="100%" height={420}>
+              <div style={{ background: card, borderRadius: 16, padding: "20px 16px", marginBottom: 20, border: `1px solid ${border}` }}>
+                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Signal Radar — {chartSession.toUpperCase()}</div>
+                <ResponsiveContainer width="100%" height={360}>
                   <RadarChart data={radarData}>
                     <PolarGrid stroke={border} />
-                    <PolarAngleAxis dataKey="signal" tick={{ fill: sub, fontSize: 12, fontFamily: font }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: border, fontSize: 10 }} />
+                    <PolarAngleAxis dataKey="signal" tick={{ fill: sub, fontSize: 11, fontFamily: font }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: border, fontSize: 9 }} />
                     {chartDrivers.map(id => { const d = DRIVERS.find(x => x.id === id); return d ? <Radar key={id} name={d.name.split(" ").pop()} dataKey={id} stroke={TC(d.team)} fill={TC(d.team)} fillOpacity={0.1} strokeWidth={2.5} /> : null; })}
-                    <Tooltip contentStyle={{ background: card, border: `1px solid ${border}`, borderRadius: 12, fontSize: 13, fontFamily: font }} />
-                    <RLegend wrapperStyle={{ fontSize: 13, fontFamily: font, color: sub }} />
+                    <Tooltip contentStyle={{ background: card, border: `1px solid ${border}`, borderRadius: 12, fontSize: 12, fontFamily: font }} />
+                    <RLegend wrapperStyle={{ fontSize: 11, fontFamily: font, color: sub }} />
                   </RadarChart>
                 </ResponsiveContainer>
               </div>
 
               {/* Lap timeline */}
-              <div style={{ background: card, borderRadius: 16, padding: 24, border: `1px solid ${border}` }}>
-                <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Lap Time Trace — {chartSession.toUpperCase()}</div>
-                <ResponsiveContainer width="100%" height={400}>
-                  <LineChart data={lapTimelineData} margin={{ left: 10, right: 20 }}>
+              <div style={{ background: card, borderRadius: 16, padding: "20px 16px", marginBottom: 20, border: `1px solid ${border}` }}>
+                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Lap Time Trace — {chartSession.toUpperCase()}</div>
+                <ResponsiveContainer width="100%" height={350}>
+                  <LineChart data={lapTimelineData} margin={{ left: 0, right: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={border} />
-                    <XAxis dataKey="lap" tick={{ fill: sub, fontSize: 11 }} label={{ value: "Lap", position: "bottom", fill: sub, fontSize: 12 }} />
-                    <YAxis tick={{ fill: sub, fontSize: 11 }} domain={["auto", "auto"]} label={{ value: "Time (s)", angle: -90, position: "insideLeft", fill: sub, fontSize: 12 }} />
-                    <Tooltip contentStyle={{ background: card, border: `1px solid ${border}`, borderRadius: 12, fontSize: 12, fontFamily: font }} formatter={(v) => v ? [fmt(v), "Lap Time"] : ["—"]} />
+                    <XAxis dataKey="lap" tick={{ fill: sub, fontSize: 10 }} />
+                    <YAxis tick={{ fill: sub, fontSize: 10 }} domain={["auto", "auto"]} />
+                    <Tooltip contentStyle={{ background: card, border: `1px solid ${border}`, borderRadius: 12, fontSize: 11, fontFamily: font }} formatter={(v) => v ? [fmt(v), "Lap Time"] : ["—"]} />
                     {chartDrivers.map(id => { const d = DRIVERS.find(x => x.id === id); return d ? <Line key={id} type="monotone" dataKey={id} name={d.name.split(" ").pop()} stroke={TC(d.team)} strokeWidth={2} dot={false} connectNulls /> : null; })}
-                    <RLegend wrapperStyle={{ fontSize: 12, fontFamily: font, color: sub }} />
+                    <RLegend wrapperStyle={{ fontSize: 11, fontFamily: font, color: sub }} />
                   </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Sector comparison — best sectors per driver */}
+              <div style={{ background: card, borderRadius: 16, padding: "20px 16px", border: `1px solid ${border}` }}>
+                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Best Sectors — {statsSession.toUpperCase()}</div>
+                <ResponsiveContainer width="100%" height={Math.max(300, statsList.length * 28)}>
+                  <BarChart data={statsList.map(d => ({ name: d.name.split(" ").pop(), S1: d.sector1 || 0, S2: d.sector2 || 0, S3: d.sector3 || 0, fill: TC(d.team) }))} layout="vertical" margin={{ left: 60, right: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={border} />
+                    <XAxis type="number" tick={{ fill: sub, fontSize: 10 }} />
+                    <YAxis dataKey="name" type="category" tick={{ fill: txt, fontSize: 11, fontWeight: 600 }} width={55} />
+                    <Tooltip contentStyle={{ background: card, border: `1px solid ${border}`, borderRadius: 10, fontSize: 11, fontFamily: font }} formatter={(v) => [fmt(v), ""]} />
+                    <Bar dataKey="S1" name="Sector 1" stackId="a" fill="#00d26a" />
+                    <Bar dataKey="S2" name="Sector 2" stackId="a" fill="#22d3ee" />
+                    <Bar dataKey="S3" name="Sector 3" stackId="a" fill="#f59e0b" />
+                    <RLegend wrapperStyle={{ fontSize: 11, fontFamily: font, color: sub }} />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             </>)}
@@ -755,7 +768,7 @@ export default function App() {
               {/* Signals — full width, 2-column grid */}
               <div style={{ background: card, borderRadius: 16, padding: 24, marginBottom: 20, border: `1px solid ${border}` }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: sub, marginBottom: 14 }}>SIGNALS</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))", gap: 10 }}>
                   {SIGNALS.map(sig => {
                     const conf = sigConfig.find(s => s.key === sig.key);
                     return (
@@ -807,7 +820,7 @@ export default function App() {
               </div>
 
               {/* Two columns: Ranking + Optimizer */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 24 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(380px, 100%), 1fr))", gap: 24 }}>
                 {/* Predicted Ranking */}
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Predicted Ranking</div>
@@ -862,19 +875,36 @@ export default function App() {
             </>)}
           </div>
         )}
-
-        {/* ═══ OLD UI ═══ */}
-        {tab === "old" && (
-          <div className="fi" style={{ textAlign: "center", padding: 60, color: sub }}>
-            <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Old UI</div>
-            <div style={{ fontSize: 14 }}>The previous interface is preserved as a separate page. Deploy the old App.jsx alongside this new version in your project.</div>
-          </div>
-        )}
       </div>
 
-      <div style={{ borderTop: `1px solid ${border}`, padding: "24px 24px", textAlign: "center", marginTop: 40 }}>
-        <div style={{ fontSize: 12, color: sub, marginBottom: 6 }}>F1 Fantasy Predictor · 2026 · Powered by OpenF1</div>
-        <div style={{ fontSize: 13, color: sub, fontWeight: 600 }}>Built by <span style={{ color: txt }}>kiweeone</span></div>
+      {/* ─── BOTTOM TAB BAR ─── */}
+      <nav style={{
+        position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200,
+        background: "#0a0a0aee", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        borderTop: `1px solid ${border}`,
+        display: "flex", justifyContent: "space-around", alignItems: "center",
+        padding: "8px 0 max(8px, env(safe-area-inset-bottom))",
+      }}>
+        {[
+          { k: "home", label: "Home", icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
+          { k: "stats", label: "Stats", icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg> },
+          { k: "team", label: "Team", icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> },
+          { k: "predictor", label: "Predict", icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> },
+        ].map(({ k, label, icon }) => (
+          <button key={k} onClick={() => setTab(k)} style={{
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+            background: "none", border: "none", cursor: "pointer",
+            color: tab === k ? accent : sub, fontSize: 10, fontWeight: 600,
+            fontFamily: font, padding: "4px 12px", transition: "color 0.2s",
+          }}>
+            {icon}
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      <div style={{ borderTop: `1px solid ${border}`, padding: "16px 24px", textAlign: "center", marginBottom: 80 }}>
+        <div style={{ fontSize: 11, color: sub }}>F1 Fantasy Predictor · 2026 · Powered by OpenF1 · Built by <span style={{ color: txt }}>kiweeone</span></div>
       </div>
     </div>
   );
