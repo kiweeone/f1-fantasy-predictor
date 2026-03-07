@@ -730,6 +730,7 @@ export default function App() {
                         <div style={{ fontSize: 13, fontWeight: 700, color: "#FF8000", marginBottom: 6 }}>{s.toUpperCase()}{!available && " ·"}</div>
                         <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>{sesWeights[s] || 0}%</div>
                         <input type="range" min={0} max={100} value={sesWeights[s] || 0} onChange={e => available && setSesWeights(p => ({ ...p, [s]: parseInt(e.target.value) }))} disabled={!available} style={{ width: "100%", accentColor: "#FF8000", cursor: available ? "pointer" : "default" }} />
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3, fontSize: 10, color: sub }}><span>0%</span><span>100%</span></div>
                       </div>
                     );
                   })}
@@ -739,22 +740,51 @@ export default function App() {
               {/* Signals — full width, 2-column grid */}
               <div style={{ background: card, borderRadius: 16, padding: 24, marginBottom: 20, border: `1px solid ${border}` }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: sub, marginBottom: 14 }}>SIGNALS</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
                   {SIGNALS.map(sig => {
                     const conf = sigConfig.find(s => s.key === sig.key);
                     return (
-                      <div key={sig.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: conf.on ? card2 : "transparent", borderRadius: 10, border: `1px solid ${conf.on ? border : "transparent"}`, opacity: conf.on ? 1 : 0.4 }}>
-                        <div onClick={() => toggleSig(sig.key)} style={{ width: 44, height: 24, borderRadius: 12, background: conf.on ? sig.color : card2, position: "relative", cursor: "pointer", flexShrink: 0 }}>
-                          <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: conf.on ? 22 : 2, transition: "all 0.2s" }} />
+                      <div key={sig.key} style={{
+                        padding: "14px 16px",
+                        background: conf.on ? card2 : "transparent",
+                        borderRadius: 12,
+                        border: `1px solid ${conf.on ? sig.color + "44" : border}`,
+                        opacity: conf.on ? 1 : 0.45,
+                        transition: "all 0.2s",
+                        overflow: "hidden",
+                      }}>
+                        {/* Row 1: Toggle + Label */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: conf.on ? 10 : 0 }}>
+                          <div onClick={() => toggleSig(sig.key)} style={{
+                            width: 44, height: 24, borderRadius: 12, flexShrink: 0,
+                            background: conf.on ? sig.color : "#38383a",
+                            position: "relative", cursor: "pointer",
+                          }}>
+                            <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: conf.on ? 22 : 2, transition: "all 0.2s" }} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: conf.on ? txt : sub }}>{sig.label}</div>
+                            <div style={{ fontSize: 11, color: sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sig.desc}</div>
+                          </div>
+                          {conf.on && (
+                            <span style={{ fontSize: 18, fontWeight: 800, color: sig.color, flexShrink: 0 }}>{conf.weight}</span>
+                          )}
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600 }}>{sig.label}</div>
-                          <div style={{ fontSize: 11, color: sub }}>{sig.desc}</div>
-                        </div>
-                        {conf.on && <div style={{ display: "flex", alignItems: "center", gap: 8, width: 110, flexShrink: 0 }}>
-                          <input type="range" min={1} max={40} value={conf.weight} onChange={e => setSigW(sig.key, parseInt(e.target.value))} style={{ flex: 1, accentColor: sig.color }} />
-                          <span style={{ fontSize: 14, fontWeight: 700, color: sig.color, width: 30, textAlign: "right" }}>{conf.weight}</span>
-                        </div>}
+                        {/* Row 2: Slider (only when on) */}
+                        {conf.on && (
+                          <div>
+                            <input
+                              type="range" min={1} max={40} value={conf.weight}
+                              onChange={e => setSigW(sig.key, parseInt(e.target.value))}
+                              style={{ width: "100%", accentColor: sig.color, cursor: "pointer" }}
+                            />
+                            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2, fontSize: 10, color: sub }}>
+                              <span>1</span>
+                              <span>Weight</span>
+                              <span>40</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
