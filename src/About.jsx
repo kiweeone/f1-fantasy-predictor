@@ -15,7 +15,7 @@ export default function About() {
         .fu2{animation:fadeUp .5s ease-out .1s both}
         .fu3{animation:fadeUp .5s ease-out .2s both}
         :root { --pad: 48px; }
-        @media (max-width: 768px) { :root { --pad: 20px; } }
+        @media (max-width: 768px) { :root { --pad: 32px; } }
       `}</style>
 
       {/* ─── BACK ─── */}
